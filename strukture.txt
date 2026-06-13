@@ -1,0 +1,37 @@
+khuroson_mes/
+├── .env                  # Конфиденциальные переменные (пароли БД, ключи)
+├── .gitignore            # Исключения для Git
+├── README.md             # Описание проекта и инструкция по запуску
+├── requirements.txt      # Зависимости проекта (fastapi, sqlalchemy, pydantic и т.д.)
+│
+├── alembic/              # Папка миграций базы данных (генерируется автоматически)
+├── alembic.ini           # Конфигурация Alembic
+│
+└── src/                  # Исходный код бэкенда
+    ├── __init__.py
+    ├── main.py           # Точка входа в приложение FastAPI
+    │
+    ├── core/             # Системное ядро приложения
+    │   ├── config.py     # Чтение настроек из .env через Pydantic Settings
+    │   └── database.py   # Настройка сессии SQLAlchemy (async/sync сессии)
+    │
+    ├── models/           # Таблицы базы данных (SQLAlchemy)
+    │   ├── __init__.py   # Импорт всех моделей для Alembic
+    │   ├── materials.py  # Справочник сырья и транзакции
+    │   └── production.py # Справочник продуктов и логи выпуска
+    │
+    ├── schemas/          # Валидация входных/выходных данных (Pydantic)
+    │   ├── materials.py  # Схемы для сырья (MaterialCreate, MaterialResponse)
+    │   └── production.py # Схемы для логов (ProductionLogCreate)
+    │
+    ├── services/         # Бизнес-логика (Сервисный слой)
+    │   ├── warehouse.py  # Расчет остатков, проведение транзакций сырья
+    │   └── manufacturing.py # Фиксация выпуска, проверка лимитов брака
+    │
+    └── api/              # Маршрутизация (Эндпоинты для клиентов)
+        ├── v1/
+        │   ├── router.py # Главный роутер, объединяющий все эндпоинты
+        │   ├── endpoints/
+        │   │   ├── materials.py  # API для работы со складом сырья
+        │   │   └── production.py # API для планшета рабочих (фиксация смен)
+        │   └── deps.py   # Зависимости API (получение сессии БД, авторизация)

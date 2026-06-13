@@ -1,0 +1,23 @@
+# Виртуальное окружение
+venv/
+.venv/
+env/
+
+# Секреты и конфигурация (КРИТИЧЕСКИ ВАЖНО)
+.env
+
+# Кэш Python
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+
+# Локальная база данных SQLite
+*.db
+*.db-journal
+
+# Настройки IDE (VS Code / PyCharm)
+.vscode/
+.idea/
