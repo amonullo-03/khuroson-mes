@@ -1,8 +1,9 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from src.modules.erp.models import Order, OrderStatus
-from src.modules.erp.schemas import OrderCreate
+from sqlalchemy import select, func
+
+from src.modules.erp.models import Order, OrderStatus, FinishedGoodsInventory, Waybill
+from src.modules.erp.schemas import OrderCreate, WaybillCreate
 from src.modules.mes.models import Product, ProductRecipe
 from src.modules.wms.services import get_material_balances_by_location
 
@@ -50,4 +51,64 @@ async def create_client_order(order_in: OrderCreate, db: AsyncSession):
     await db.commit()
     await db.refresh(new_order)
     return new_order
+
+
+async def ship_order_part(waybill_in: WaybillCreate, db: AsyncSession):
+    """
+    Проведение отгрузки: проверка остатков шлакоблоков на складе ГП,
+    создание ТТН и автоматическое обновление статуса заказа.
+    """
+    # 1. Ищем заказ
+    order = await db.scalar(select(Order).where(Order.id == waybill_in.order_id))
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+
+    # 2. Проверяем склад готовой продукции
+    inventory = await db.scalar(
+        select(FinishedGoodsInventory).where(FinishedGoodsInventory.product_id == order.product_id)
+    )
+    if not inventory or inventory.quantity_available < waybill_in.quantity_shipped:
+        available = inventory.quantity_available if inventory else 0
+        raise HTTPException(
+            status_code=400,
+            detail=f"Недостаточно готовой продукции на складе ГП. Доступно: {available}, требуется: {waybill_in.quantity_shipped}"
+        )
+
+    # 3. Считаем, сколько БЫЛО отгружено по этому заказу ДО текущей машины
+    previous_shipped_result = await db.execute(
+        select(func.coalesce(func.sum(Waybill.quantity_shipped), 0)).where(Waybill.order_id == order.id)
+    )
+    previously_shipped = previous_shipped_result.scalar() or 0
+
+    # 4. Списываем блоки со склада ГП
+    inventory.quantity_available -= waybill_in.quantity_shipped
+
+    # 5. Создаем ТТН
+    new_waybill = Waybill(**waybill_in.model_dump())
+    db.add(new_waybill)
+
+    # 6. Обновляем статус заказа: прибавляем к старым отгрузкам текущую
+    if (previously_shipped + waybill_in.quantity_shipped) >= order.quantity_ordered:
+        order.status = OrderStatus.SHIPPED
+
+    await db.commit()
+    await db.refresh(new_waybill)
+    return new_waybill
+
+
+
+async def add_finished_goods_to_inventory(product_id: int, quantity: int, db: AsyncSession):
+    """
+    Изолированный сервис: оприходование готовой продукции на склад ГП.
+    """
+    stmt = select(FinishedGoodsInventory).where(FinishedGoodsInventory.product_id == product_id)
+    inv = await db.scalar(stmt)
+    
+    if not inv:
+        inv = FinishedGoodsInventory(product_id=product_id, quantity_available=quantity)
+        db.add(inv)
+    else:
+        inv.quantity_available += quantity
+    
+    # Мы НЕ делаем здесь db.commit(), так как эта функция — часть большой транзакции цеха!
 

@@ -1,10 +1,13 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
 from src.modules.mes.models import Product, ProductRecipe, ProductionBatch, BatchStatus
 from src.modules.wms.models import MaterialTransaction, TransactionType
 from src.modules.mes.schemas import ProductionBatchCreate, BatchCloseRequest
 from src.modules.wms.services import get_material_balances_by_location
+from src.modules.erp.services import add_finished_goods_to_inventory
+
 
 async def start_production_batch(batch_in: ProductionBatchCreate, db: AsyncSession):
     """
@@ -81,8 +84,8 @@ async def move_batch_to_curing(batch_id: int, db: AsyncSession):
 
 async def close_production_batch(batch_id: int, req: BatchCloseRequest, db: AsyncSession):
     """
-    Выход из сушки: фиксация годных блоков, объема брака 
-    и перевод в финальный статус DONE.
+    Выход из сушки: фиксация годных блоков, объема брака
+    и перевод в финальный статус DONE с автоприемкой на склад ГП.
     """
     batch = await db.scalar(select(ProductionBatch).where(ProductionBatch.id == batch_id))
     if not batch:
@@ -90,14 +93,23 @@ async def close_production_batch(batch_id: int, req: BatchCloseRequest, db: Asyn
 
     if batch.quantity_molded != (req.quantity_good + req.quantity_defective):
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Сумма годных ({req.quantity_good}) и бракованных ({req.quantity_defective}) изделий должна быть равна изначально отформованному количеству ({batch.quantity_molded})!"
         )
 
+    # 1. Фиксируем итоги пропарки в MES
     batch.quantity_good = req.quantity_good
     batch.quantity_defective = req.quantity_defective
     batch.status = BatchStatus.DONE
     
+    # 2. Передаем годную продукцию на склад ГП через официальный сервис модуля ERP
+    await add_finished_goods_to_inventory(
+        product_id=batch.product_id, 
+        quantity=req.quantity_good, 
+        db=db
+    )
+
+    # 3. Сохраняем всю транзакцию атомарно!
     await db.commit()
     await db.refresh(batch)
     return batch

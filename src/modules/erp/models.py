@@ -22,3 +22,22 @@ class Order(Base):
     status: Mapped[OrderStatus] = mapped_column(SQLEnum(OrderStatus), default=OrderStatus.CREATED)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+class FinishedGoodsInventory(Base):
+    """Склад готовой продукции (хранение и резерв блоков)"""
+    __tablename__ = "erp_finished_goods"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("mes_products.id"), unique=True, nullable=False)
+    quantity_available: Mapped[int] = mapped_column(Integer, default=0)  # Свободный остаток
+
+class Waybill(Base):
+    """Товарно-транспортная накладная (ТТН) для логистики"""
+    __tablename__ = "erp_waybills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("erp_orders.id"), nullable=False)
+    driver_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    truck_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    quantity_shipped: Mapped[int] = mapped_column(Integer, nullable=False) # Сколько блоков уехало в этой машине
+    shipped_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+

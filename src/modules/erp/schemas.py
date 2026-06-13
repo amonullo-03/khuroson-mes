@@ -20,3 +20,14 @@ class OrderResponse(OrderCreate):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+class WaybillCreate(BaseModel):
+    order_id: int
+    driver_name: str = Field(..., max_length=100, description="Имя водителя")
+    truck_number: str = Field(..., max_length=20, description="Гос. номер машины")
+    quantity_shipped: PositiveInt = Field(..., description="Количество отгружаемых блоков")
+
+class WaybillResponse(WaybillCreate):
+    id: int
+    shipped_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
