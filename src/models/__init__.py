@@ -1,18 +1,9 @@
-# Импортируем сам Base
 from src.core.database import Base
+from src.modules.wms.models import Location, Material, MaterialTransaction
+from src.modules.mes.models import Product, ProductRecipe, ProductionBatch
+from src.modules.erp.models import Order
 
-# Импортируем все классы моделей, чтобы SQLAlchemy «увидела» их метаданные
-from src.models.materials import Material, MaterialTransaction
-from src.models.production import Product, ProductionLog, ProductRecipe
-
-# Экспортируем их для удобного внешнего доступа (опционально)
-__all__ = [
-    "Base",
-    "Material",
-    "MaterialTransaction",
-    "Product",
-    "ProductionLog",
-    "ProductRecipe",
-]
+# Экспортируем Base для Alembic
+__all__ = ["Base"]
 
 

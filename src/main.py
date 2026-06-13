@@ -2,33 +2,32 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
-from src.api.v1.endpoints import production, materials
-
+# Импортируем наш единый новый роутер, который объединяет все 3 модуля
+from src.api.v1.router import api_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    version="0.1.0",
-    description="Backend центр для MES-системы цеха в Хуросоне"
+    version="2.0.0",  # Поднимаем версию до модульной архитектуры!
+    description="Backend центр для модульной ERP/MES/WMS экосистемы T-Link"
 )
 
-# Настройка CORS (чтобы в будущем планшеты и веб-панели могли спокойно слать запросы)
+# Ваша проверенная настройка CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Для MVP разрешаем доступ отовсюду
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/")
+@app.get("/", tags=["Системные"])
 async def root():
     return {
         "status": "online",
         "project": settings.PROJECT_NAME,
-        "message": "Привет из Хуросона! Бэкенд работает исправно."
+        "message": "Привет из Хуросона! Бэкенд экосистемы T-Link работает исправно."
     }
 
+# Регистрируем единый роутер, в котором уже упакованы /production, /materials и /orders
+app.include_router(api_router, prefix="/api/v1")
 
-# <-- ДОБАВИЛИ РЕГИСТРАЦИЮ РОУТЕРА -->
-app.include_router(production.router, prefix="/api/v1/production", tags=["Производство"])
-app.include_router(materials.router, prefix="/api/v1/materials", tags=["Материалы - Склад"])

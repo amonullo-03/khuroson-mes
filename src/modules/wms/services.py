@@ -1,16 +1,13 @@
-# src/services/warehouse.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
-from src.models.materials import Material, MaterialTransaction, TransactionType
-from src.schemas.materials import MaterialBalance
+from src.modules.wms.models import Material, MaterialTransaction, TransactionType
+from src.modules.wms.schemas import MaterialBalance
 from typing import List
 
-async def get_all_material_balances(db: AsyncSession) -> List[MaterialBalance]:
+async def get_material_balances_by_location(db: AsyncSession, location_id: int) -> List[MaterialBalance]:
     """
-    Оптимизированный сервис расчета остатков.
-    Делает всего 1 запрос к базе данных вместо N+1!
+    Оптимизированный расчет остатков сырья на конкретном складе (1 SQL запрос)
     """
-    # Считаем сумму приходов и расходов, группируя по материалам
     stmt = (
         select(
             Material.id,
@@ -32,6 +29,7 @@ async def get_all_material_balances(db: AsyncSession) -> List[MaterialBalance]:
             ).label("balance")
         )
         .join(MaterialTransaction, Material.id == MaterialTransaction.material_id, isouter=True)
+        .where(MaterialTransaction.location_id == location_id) # Фильтр по конкретному складу
         .group_by(Material.id, Material.name, Material.unit)
     )
     
