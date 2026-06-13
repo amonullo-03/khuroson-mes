@@ -31,11 +31,14 @@ def do_run_migrations(connection):
 
 
 async def run_async_migrations() -> None:
-    """Здесь мы перехватываем управление и подсовываем URL из .env"""
+    """
+    Асинхронный режим миграций.
+    Здесь мы подменяем URL из alembic.ini на асинхронный из .env через settings.
+    """
     configuration = config.get_section(config.config_ini_section) or {}
-    
-    # ИМЕННО ТУТ подменяем URL на наш асинхронный sqlite из .env
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+
+    # ВАЖНО: Используем ASYNC URL для async_engine_from_config
+    configuration["sqlalchemy.url"] = settings.database_url_async
 
     connectable = async_engine_from_config(
         configuration,
@@ -50,8 +53,11 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_offline() -> None:
-    """Режим оффлайн (генерация SQL скриптов без подключения к БД)"""
-    url = settings.DATABASE_URL
+    """
+    Режим оффлайн (генерация SQL скриптов без подключения к БД).
+    Используется SYNC URL для psycopg2.
+    """
+    url = settings.database_url_sync
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -66,6 +72,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Главная точка входа, которая запускает асинхронный цикл"""
     asyncio.run(run_async_migrations())
+
 
 # ВОТ ЭТОТ БЛОК ОБЯЗАТЕЛЬНО ДОЛЖЕН БЫТЬ В САМОМ КОНЦЕ ФАЙЛА:
 if context.is_offline_mode():
