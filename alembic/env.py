@@ -1,3 +1,4 @@
+"""Alembic environment configuration for async migrations."""
 import asyncio
 import sys
 from os.path import realpath, dirname
@@ -25,6 +26,7 @@ target_metadata = Base.metadata
 
 
 def do_run_migrations(connection):
+    """Выполнить миграции с уже готовым подключением."""
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
@@ -32,18 +34,27 @@ def do_run_migrations(connection):
 
 async def run_async_migrations() -> None:
     """
-    Асинхронный режим миграций.
-    Здесь мы подменяем URL из alembic.ini на асинхронный из .env через settings.
+    Асинхронный режим миграций (для production с asyncpg).
+    
+    Подменяем конфигурацию Alembic на асинхронный URL из settings.
+    Используем NullPool чтобы каждая миграция была в отдельном соединении.
     """
     configuration = config.get_section(config.config_ini_section) or {}
 
-    # ВАЖНО: Используем ASYNC URL для async_engine_from_config
+    # ✅ ВАЖНО: Используем ASYNC URL для asyncpg
     configuration["sqlalchemy.url"] = settings.database_url_async
 
+    # ✅ Правильная конфигурация для asyncpg в Alembic
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
+        poolclass=pool.NullPool,  # Отключаем пул для миграций (каждая миграция в новом соединении)
+        connect_args={
+            "server_settings": {
+                "application_name": f"{settings.PROJECT_NAME}-alembic",
+            },
+            "timeout": 30,  # Миграции могут быть долгими
+        },
     )
 
     async with connectable.connect() as connection:
@@ -55,14 +66,18 @@ async def run_async_migrations() -> None:
 def run_migrations_offline() -> None:
     """
     Режим оффлайн (генерация SQL скриптов без подключения к БД).
-    Используется SYNC URL для psycopg2.
+    
+    Используем SYNC URL для корректной генерации SQL для PostgreSQL.
+    Это нужно когда вы хотите просто сгенерировать SQL файл без реального применения.
     """
+    # ✅ Используем SYNC URL для offline режима (psycopg2)
     url = settings.database_url_sync
+    
     context.configure(
         url=url,
         target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
+        literal_binds=True,  # Bind параметры прямо в SQL (вместо placeholders)
+        dialect_opts={"paramstyle": "named"},  # Используем named параметры
     )
 
     with context.begin_transaction():
@@ -70,11 +85,22 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Главная точка входа, которая запускает асинхронный цикл"""
-    asyncio.run(run_async_migrations())
+    """
+    Главная точка входа, которая определяет режим и запускает нужную функцию.
+    
+    - Если Alembic в offline режиме: генерирует SQL скрипты
+    - Если онлайн: запускает асинхронные миграции через asyncpg
+    """
+    if context.is_offline_mode():
+        # Offline режим: просто генерируем SQL
+        run_migrations_offline()
+    else:
+        # Online режим: запускаем асинхронный цикл для миграций
+        asyncio.run(run_async_migrations())
 
 
-# ВОТ ЭТОТ БЛОК ОБЯЗАТЕЛЬНО ДОЛЖЕН БЫТЬ В САМОМ КОНЦЕ ФАЙЛА:
+# === ТОЧКА ВХОДА ===
+# Этот блок ОБЯЗАТЕЛЬНО должен быть в самом конце файла
 if context.is_offline_mode():
     run_migrations_offline()
 else:

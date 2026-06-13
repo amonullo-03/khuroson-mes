@@ -1,11 +1,28 @@
+"""Khuroson MES Configuration Module.
+
+Центральный модуль конфигурации проекта.
+Все параметры читаются из файла .env в корне проекта.
+
+Пример .env файла:
+    PROJECT_NAME="Khuroson MES"
+    DB_USER="mes_user"
+    DB_PASSWORD="secure_password"
+    DB_HOST="localhost"
+    DB_PORT=5432
+    DB_NAME="khuroson_mes"
+    DEBUG=false
+    LOG_LEVEL="INFO"
+"""
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List, Optional
+from typing import List
 
 
 class Settings(BaseSettings):
     """
     Главная конфигурация проекта Khuroson MES.
-    Все параметры читаются из файла .env в корне проекта.
+    
+    Все параметры читаются из файла .env в ко��не проекта.
+    Используется Pydantic v2 для валидации.
     """
 
     # === PROJECT ===
@@ -14,6 +31,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # === DATABASE (component parts для гибкости) ===
+    # Разбиваем DATABASE_URL на компоненты для лучшей конфигурируемости
     DB_USER: str
     DB_PASSWORD: str
     DB_HOST: str = "localhost"
@@ -21,14 +39,18 @@ class Settings(BaseSettings):
     DB_NAME: str
 
     # === DATABASE POOL (production-важно!) ===
+    # DB_POOL_SIZE: кол-во соединений в пуле для asyncpg
+    # DB_MAX_OVERFLOW: доп. соединения сверх pool_size когда нужно (НЕ используется для asyncpg)
+    # DB_ECHO: логирование SQL запросов в разработке
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
-    DB_ECHO: bool = False  # SQLAlchemy echo для логирования SQL в разработке
+    DB_ECHO: bool = False
 
     # === LOGGING ===
     LOG_LEVEL: str = "INFO"
 
     # === CORS ===
+    # Для production: CORS_ORIGINS="http://localhost:3000,https://yourfrontend.com"
     CORS_ORIGINS: List[str] = ["*"]
 
     # === API ===
@@ -44,12 +66,17 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # === COMPUTED PROPERTIES ===
+    # === COMPUTED PROPERTIES (вычисляемые поля) ===
     @property
     def database_url_async(self) -> str:
         """
         URL для асинхронного engine (FastAPI + asyncpg).
-        Используется в src/core/database.py для create_async_engine().
+        
+        Используется в:
+        - src/core/database.py для create_async_engine()
+        - alembic/env.py для run_async_migrations()
+        
+        Формат: postgresql+asyncpg://user:password@host:port/dbname
         """
         return (
             f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}"
@@ -59,8 +86,13 @@ class Settings(BaseSettings):
     @property
     def database_url_sync(self) -> str:
         """
-        URL для синхронного подключения (Alembic миграции, тесты).
-        Используется в alembic/env.py и tests/conftest.py для psycopg2.
+        URL для синхронного подключения (Alembic offline режим, тесты через psycopg2).
+        
+        Используется в:
+        - alembic/env.py для run_migrations_offline()
+        - tests/conftest.py для psycopg2.connect()
+        
+        Формат: postgresql://user:password@host:port/dbname
         """
         return (
             f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}"
@@ -68,4 +100,6 @@ class Settings(BaseSettings):
         )
 
 
+# === SINGLETON ===
+# Создаем единственный экземпляр Settings, который используется по всему проекту
 settings = Settings()

@@ -1,4 +1,4 @@
-"""Database configuration and session management."""
+"""Database configuration and session management for async operations."""
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -16,16 +16,27 @@ class Base(DeclarativeBase):
     pass
 
 
-# Async engine для FastAPI с пулом соединений
+# === ASYNC ENGINE ДЛЯ FASTAPI ===
+# asyncpg требует специальной конфигурации через connect_args
 engine = create_async_engine(
     settings.database_url_async,
     echo=settings.DB_ECHO,
     future=True,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_recycle=3600,  # Переиспользуем соединения каждый час
+    # ✅ ПРАВИЛЬНАЯ конфигурация для asyncpg
+    connect_args={
+        "server_settings": {
+            "application_name": settings.PROJECT_NAME,
+            "jit": "off",  # Отключаем JIT компиляцию для стабильности
+        },
+        "timeout": 10,  # Timeout подключения
+        "command_timeout": 10,  # Timeout команд
+    },
+    # Пул соединений
+    pool_pre_ping=True,  # Проверяем соединение перед использованием (важно для долгоживущих соединений)
+    pool_recycle=3600,  # Переиспользуем соединения каждый час (для избежания timeout'ов БД)
 )
 
+# === ASYNC SESSION FACTORY ===
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     autocommit=False,
@@ -36,7 +47,15 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Dependency для получения БД сессии в эндпоинтах."""
+    """
+    Dependency для получения БД сессии в эндпоинтах FastAPI.
+
+    Пример использования в роутере:
+        @router.get("/items")
+        async def get_items(db: AsyncSession = Depends(get_db)):
+            result = await db.execute(select(Item))
+            return result.scalars().all()
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session
